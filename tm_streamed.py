@@ -1,5 +1,6 @@
 import argparse
 import json
+import readline  # for better input handling
 import sys
 import time
 
@@ -44,6 +45,16 @@ def measure_tps(prompt, model):
     print(f"Speed: {tps:.2f} tokens/second")
 
 
+def interactive_session(model):
+    print(f"Interactive session with {model}. Type 'exit' to quit.")
+    while True:
+        prompt = input("You: ")
+        if prompt.lower() == 'exit':
+            break
+        measure_tps(prompt, model)
+        print("\n")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Measure TPS for Ollama models")
@@ -51,6 +62,11 @@ if __name__ == "__main__":
                         help="Custom prompt for the model")
     parser.add_argument("--model", type=str, default="llama3.2:latest",
                         help="Model to use (default: llama3.2:latest)")
+    parser.add_argument("-i", "--interactive", action="store_true",
+                        help="Run in interactive mode")
     args = parser.parse_args()
 
-    measure_tps(args.prompt, args.model)
+    if args.interactive:
+        interactive_session(args.model)
+    else:
+        measure_tps(args.prompt, args.model)
