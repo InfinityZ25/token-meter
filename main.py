@@ -276,14 +276,10 @@ def generate_selenium_code(prompt: str, model: str, system_prompt_prefix: str = 
     Write a Python function using Selenium to accomplish the following task. Follow these guidelines:
     1. Do not include any import statements.
     2. The function should be named 'custom_selenium_interaction' and take a 'driver' parameter.
-    3. Use only the following pre-imported modules: selenium, By, WebDriverWait, EC, time
-    4. Do not create or quit the driver within the function.
-    5. Return the result directly from the function.
-    6. Include brief comments explaining the code.
-    7. You can use utility functions from the SeleniumUtils class: take_screenshot, wait_for_element, scroll_to_bottom
-    8. Implement error handling using try-except blocks.
+    3. Use only the following pre-imported modules: selenium, By, WebDriverWait, and EC.
+    4. Use the utility functions from SeleniumUtils where appropriate.
 
-    Task: {prompt}
+    Request: {prompt}
     ===
     {system_prompt_suffix}
     """
@@ -293,18 +289,64 @@ def generate_selenium_code(prompt: str, model: str, system_prompt_prefix: str = 
         "stream": True
     }
     response = requests.post(url, json=payload, stream=True)
-    generated_code = ""
-    console.print("Generating Selenium code:", style="bold cyan")
+    result = ""
+    console.print("Generating code:", style="bold cyan")
     for line in response.iter_lines():
         if line:
             data = json.loads(line)
             if 'response' in data:
                 console.print(data['response'], end="")
-                generated_code += data['response']
+                result += data['response']
             if 'done' in data and data['done']:
                 break
     console.print()
-    return generated_code.strip()
+    return result.strip()
+
+
+def handle_selenium_code(code: str) -> None:
+    while True:
+        action = console.input(
+            "[bold yellow]Do you want to (r)un, (e)dit, or (c)ancel this code? [/]").lower()
+        if action == 'r':
+            console.print("Executing custom Selenium code...",
+                          style="bold blue")
+            stop_event = threading.Event()
+            stop_spinner = Thread(target=spinner, args=(stop_event,))
+            stop_spinner.start()
+            result = execute_temp_script(code, f"selenium_script_{
+                                         int(time.time())}", headless=False)
+            stop_event.set()
+            stop_spinner.join()
+            console.print("Execution result:", style="bold cyan")
+            console.print(result, style="yellow")
+            break
+        elif action == 'e':
+            code = edit_code(code)
+        elif action == 'c':
+            console.print("Code execution cancelled.", style="bold red")
+            break
+        else:
+            console.print(
+                "Invalid option. Please choose (r)un, (e)dit, or (c)ancel.", style="bold red")
+
+
+def edit_code(code: str) -> str:
+    console.print(
+        "Enter your edits (type 'done' on a new line when finished):", style="bold yellow")
+    edited_code = code + "\n"
+
+    while True:
+        line = console.input("[cyan]> [/]")
+        if line.strip().lower() == 'done':
+            break
+        edited_code += line + "\n"
+
+    # Regenerate code based on edits
+    regenerated_code = generate_selenium_code(
+        edited_code, model='your_model_here')  # Use the appropriate model
+    console.print("Updated code:", style="bold magenta")
+    console.print(regenerated_code, style="cyan")
+    return regenerated_code
 
 
 def print_interactive_session_header(model):
@@ -441,47 +483,6 @@ def interactive_session(model: str, system_prompt_prefix: str = '', system_promp
         else:
             measure_tps(user_input, model, system_prompt_prefix,
                         system_prompt_suffix)
-
-
-def handle_selenium_code(code: str) -> None:
-    while True:
-        action = console.input(
-            "[bold yellow]Do you want to (r)un, (e)dit, or (c)ancel this code? [/]").lower()
-        if action == 'r':
-            console.print("Executing custom Selenium code...",
-                          style="bold blue")
-            stop_event = threading.Event()
-            stop_spinner = Thread(target=spinner, args=(stop_event,))
-            stop_spinner.start()
-            result = execute_temp_script(code, f"selenium_script_{int(
-                time.time())}", headless=False)  # Set headless to False here
-            stop_event.set()
-            stop_spinner.join()
-            console.print("Execution result:", style="bold cyan")
-            console.print(result, style="yellow")
-            break
-        elif action == 'e':
-            code = edit_code(code)
-        elif action == 'c':
-            console.print("Code execution cancelled.", style="bold red")
-            break
-        else:
-            console.print(
-                "Invalid option. Please choose (r)un, (e)dit, or (c)ancel.", style="bold red")
-
-
-def edit_code(code: str) -> str:
-    console.print(
-        "Enter your edits (type 'done' on a new line when finished):", style="bold yellow")
-    edited_code = code + "\n"
-    while True:
-        line = console.input("[cyan]> [/]")
-        if line.strip().lower() == 'done':
-            break
-        edited_code += line + "\n"
-    console.print("Updated code:", style="bold magenta")
-    console.print(edited_code, style="cyan")
-    return edited_code
 
 
 def measure_tps(prompt: str, model: str, system_prompt_prefix: str = '', system_prompt_suffix: str = '') -> None:
