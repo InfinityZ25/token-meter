@@ -4,8 +4,9 @@ import json
 import sys
 import threading
 import time
-import urllib.parse
 import re
+import os
+import tempfile
 from contextlib import contextmanager
 from io import BytesIO
 from itertools import cycle
@@ -18,7 +19,6 @@ from PIL import Image
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich.text import Text
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
@@ -43,11 +43,18 @@ url_cache: Dict[str, str] = {}
 
 
 @contextmanager
-def get_driver():
+def get_driver(headless=True, width=1920, height=1080):
     options = webdriver.ChromeOptions()
-    options.add_argument('--headless')
+    if headless:
+        options.add_argument('--headless')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
+    options.add_argument(f'--window-size={width},{height}')
+
+    # Add these lines for troubleshooting
+    options.add_argument('--verbose')
+    options.add_argument('--log-level=3')  # Set log level to DEBUG
+
     driver = webdriver.Chrome(service=Service(
         ChromeDriverManager().install()), options=options)
     try:
@@ -71,6 +78,28 @@ def extract_code_blocks(text):
         return code_blocks[0].strip()
     return text
 
+# Utility functions that can be used in generated Selenium code
+
+
+class SeleniumUtils:
+    @staticmethod
+    def take_screenshot(driver, filename):
+        screenshot = driver.get_screenshot_as_png()
+        img = Image.open(BytesIO(screenshot))
+        img.save(filename)
+        return f"Screenshot saved as {filename}"
+
+    @staticmethod
+    def wait_for_element(driver, by, value, timeout=10):
+        return WebDriverWait(driver, timeout).until(
+            EC.presence_of_element_located((by, value))
+        )
+
+    @staticmethod
+    def scroll_to_bottom(driver):
+        driver.execute_script(
+            "window.scrollTo(0, document.body.scrollHeight);")
+
 
 def get_command_suggestion(prompt: str, model: str, system_prompt_prefix: str = '', system_prompt_suffix: str = '') -> str:
     if validators.url(prompt):
@@ -80,7 +109,21 @@ def get_command_suggestion(prompt: str, model: str, system_prompt_prefix: str = 
     temp_prompt = f"""
     {system_prompt_prefix}
     ===
-    For the following request, if it's a direct URL, return it. If it's a web search or navigation request, generate a Python function using Selenium to accomplish the task. The function should be named 'custom_selenium_interaction' and take a 'driver' parameter.
+    For the following request, if it's a direct URL, return it. If it's a web search or navigation request, generate a Python function using Selenium to accomplish the task. The function should be named 'custom_selenium_interaction' and take a 'driver' parameter. Include necessary imports at the top of the script.
+
+    You can use the following imports and functions:
+
+    from selenium import webdriver
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+    import time
+
+    # You can also use the following utility functions from the SeleniumUtils class:
+    # SeleniumUtils.take_screenshot(driver, filename)
+    # SeleniumUtils.wait_for_element(driver, by, value, timeout=10)
+    # SeleniumUtils.scroll_to_bottom(driver)
+
     Request: {prompt}
     ===
     {system_prompt_suffix}
@@ -109,51 +152,55 @@ def get_command_suggestion(prompt: str, model: str, system_prompt_prefix: str = 
     return result
 
 
-def execute_custom_selenium_code(code: str) -> str:
-    # Remove any import statements
-    code_lines = code.split('\n')
-    code_lines = [line for line in code_lines if not line.strip(
-    ).startswith(('import', 'from'))]
-    code = '\n'.join(code_lines)
+def execute_temp_script(code: str, script_name: str = "temp_script", headless=True) -> str:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        script_path = os.path.join(temp_dir, f"{script_name}.py")
 
-    with get_driver() as driver:
+        # Modify the code to import utility functions
+        modified_code = f"""
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
+import time
+
+class SeleniumUtils:
+    {SeleniumUtils.take_screenshot.__code__.co_code}
+    {SeleniumUtils.wait_for_element.__code__.co_code}
+    {SeleniumUtils.scroll_to_bottom.__code__.co_code}
+
+{code}
+"""
+
+        with open(script_path, 'w') as f:
+            f.write(modified_code)
+
         try:
-            # List of allowed modules
-            allowed_modules = [
-                'selenium', 'time', 'datetime', 'random', 'math', 'json',
-                'requests', 'os', 'sys', 're', 'collections', 'itertools',
-                'functools', 'operator', 'string', 'io', 'glob', 'shutil',
-                'PIL', 'numpy', 'pandas', 'bs4', 'lxml'
-            ]
+            spec = importlib.util.spec_from_file_location(
+                script_name, script_path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
 
-            local_env = {
-                'driver': driver,
-                'By': By,
-                'WebDriverWait': WebDriverWait,
-                'EC': EC,
-            }
+            with get_driver(headless=headless) as driver:
+                if hasattr(module, 'custom_selenium_interaction'):
+                    result = module.custom_selenium_interaction(driver)
 
-            # Dynamically import allowed modules
-            for module_name in allowed_modules:
-                try:
-                    module = importlib.import_module(module_name)
-                    local_env[module_name] = module
-                except ImportError:
-                    pass  # Skip if module is not installed
+                    success_dir = os.path.join(
+                        os.getcwd(), "successful_scripts")
+                    os.makedirs(success_dir, exist_ok=True)
+                    success_path = os.path.join(
+                        success_dir, f"{script_name}.py")
+                    with open(success_path, 'w') as f:
+                        f.write(code)
 
-            exec(code, {'__builtins__': __builtins__}, local_env)
-            if 'custom_selenium_interaction' in local_env:
-                result = local_env['custom_selenium_interaction'](driver)
-                return str(result)
-            else:
-                return "Error: custom_selenium_interaction function not found in the code."
+                    return str(result)
+                else:
+                    return "Error: custom_selenium_interaction function not found in the code."
         except Exception as e:
             return f"An error occurred while executing the custom code: {str(e)}"
 
 
 def take_screenshot(driver: webdriver.Chrome, url: str) -> str:
     try:
-        driver.set_window_size(1920, 1080)
         driver.get(url)
         WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.TAG_NAME, "body")))
@@ -166,12 +213,12 @@ def take_screenshot(driver: webdriver.Chrome, url: str) -> str:
         return f"An error occurred while taking the screenshot: {str(e)}"
 
 
-def selenium_web_interaction(url: str, take_screenshot: bool = False) -> str:
+def selenium_web_interaction(url: str, take_screenshot: bool = False, headless=True) -> str:
     if url in url_cache:
         console.print("Using cached content...", style="bold yellow")
         return url_cache[url]
 
-    with get_driver() as driver:
+    with get_driver(headless=headless) as driver:
         if take_screenshot:
             return take_screenshot(driver, url)
 
@@ -208,10 +255,12 @@ def generate_selenium_code(prompt: str, model: str, system_prompt_prefix: str = 
     Write a Python function using Selenium to accomplish the following task. Follow these guidelines:
     1. Do not include any import statements.
     2. The function should be named 'custom_selenium_interaction' and take a 'driver' parameter.
-    3. Use only the following pre-imported modules: selenium, By, WebDriverWait, EC
+    3. Use only the following pre-imported modules: selenium, By, WebDriverWait, EC, time
     4. Do not create or quit the driver within the function.
     5. Return the result directly from the function.
     6. Include brief comments explaining the code.
+    7. You can use utility functions from the SeleniumUtils class: take_screenshot, wait_for_element, scroll_to_bottom
+    8. Implement error handling using try-except blocks.
 
     Task: {prompt}
     ===
@@ -365,7 +414,8 @@ def handle_selenium_code(code: str) -> None:
             stop_event = threading.Event()
             stop_spinner = Thread(target=spinner, args=(stop_event,))
             stop_spinner.start()
-            result = execute_custom_selenium_code(code)
+            result = execute_temp_script(code, f"selenium_script_{int(
+                time.time())}", headless=False)  # Set headless to False here
             stop_event.set()
             stop_spinner.join()
             console.print("Execution result:", style="bold cyan")
