@@ -1,9 +1,11 @@
+import importlib
 import argparse
 import json
 import sys
 import threading
 import time
 import urllib.parse
+import re
 from contextlib import contextmanager
 from io import BytesIO
 from itertools import cycle
@@ -63,53 +65,11 @@ def spinner(stop):
         time.sleep(0.1)
 
 
-def measure_tps(prompt: str, model: str, system_prompt_prefix: str = '', system_prompt_suffix: str = '') -> None:
-    url = "http://localhost:11434/api/generate"
-
-    temp_prompt = f"""
-    {system_prompt_prefix}
-    ===
-    {prompt}
-    ===
-    {system_prompt_suffix}
-    """
-
-    payload = {"model": model, "prompt": temp_prompt, "stream": True}
-
-    start_time = time.time()
-    response = requests.post(url, json=payload, stream=True)
-
-    total_tokens = 0
-    response_text = ""
-    eval_duration = None
-
-    # Changed to end with a space
-    console.print("Output:", style="bold", end=" ")
-    for line in response.iter_lines():
-        if line:
-            data = json.loads(line)
-            if 'response' in data:
-                console.print(data['response'], end="")
-                response_text += data['response']
-            if 'done' in data and data['done']:
-                total_tokens = data.get(
-                    'prompt_eval_count', 0) + data.get('eval_count', 0)
-                eval_duration = data.get('eval_duration', 0) / 1e9
-                break
-
-    console.print()  # Add a newline after the output
-
-    end_time = time.time()
-
-    if eval_duration is not None:
-        tps = total_tokens / eval_duration if eval_duration > 0 else 0
-        print_statistics(model, prompt, total_tokens,
-                         eval_duration, tps, data.get('total_duration', 0)/1e9)
-    else:
-        total_duration = end_time - start_time
-        console.print(f"\nTotal Time: {total_duration:.2f}s")
-        console.print(
-            "Note: Detailed timing information not available for this model.")
+def extract_code_blocks(text):
+    code_blocks = re.findall(r'```(?:python)?(.*?)```', text, re.DOTALL)
+    if code_blocks:
+        return code_blocks[0].strip()
+    return text
 
 
 def get_command_suggestion(prompt: str, model: str, system_prompt_prefix: str = '', system_prompt_suffix: str = '') -> str:
@@ -145,11 +105,50 @@ def get_command_suggestion(prompt: str, model: str, system_prompt_prefix: str = 
 
     result = result.strip()
     if not validators.url(result):
-        return result
-    if not result.startswith('http'):
-        result = 'https://www.google.com/search?q=' + \
-            urllib.parse.quote(result)
+        result = extract_code_blocks(result)
     return result
+
+
+def execute_custom_selenium_code(code: str) -> str:
+    # Remove any import statements
+    code_lines = code.split('\n')
+    code_lines = [line for line in code_lines if not line.strip(
+    ).startswith(('import', 'from'))]
+    code = '\n'.join(code_lines)
+
+    with get_driver() as driver:
+        try:
+            # List of allowed modules
+            allowed_modules = [
+                'selenium', 'time', 'datetime', 'random', 'math', 'json',
+                'requests', 'os', 'sys', 're', 'collections', 'itertools',
+                'functools', 'operator', 'string', 'io', 'glob', 'shutil',
+                'PIL', 'numpy', 'pandas', 'bs4', 'lxml'
+            ]
+
+            local_env = {
+                'driver': driver,
+                'By': By,
+                'WebDriverWait': WebDriverWait,
+                'EC': EC,
+            }
+
+            # Dynamically import allowed modules
+            for module_name in allowed_modules:
+                try:
+                    module = importlib.import_module(module_name)
+                    local_env[module_name] = module
+                except ImportError:
+                    pass  # Skip if module is not installed
+
+            exec(code, {'__builtins__': __builtins__}, local_env)
+            if 'custom_selenium_interaction' in local_env:
+                result = local_env['custom_selenium_interaction'](driver)
+                return str(result)
+            else:
+                return "Error: custom_selenium_interaction function not found in the code."
+        except Exception as e:
+            return f"An error occurred while executing the custom code: {str(e)}"
 
 
 def take_screenshot(driver: webdriver.Chrome, url: str) -> str:
@@ -236,21 +235,6 @@ def generate_selenium_code(prompt: str, model: str, system_prompt_prefix: str = 
                 break
     console.print()
     return generated_code.strip()
-
-
-def execute_custom_selenium_code(code: str) -> str:
-    with get_driver() as driver:
-        try:
-            local_env = {'driver': driver, 'By': By,
-                         'WebDriverWait': WebDriverWait, 'EC': EC}
-            exec(code, {'__builtins__': {}}, local_env)
-            if 'custom_selenium_interaction' in local_env:
-                result = local_env['custom_selenium_interaction'](driver)
-                return str(result)
-            else:
-                return "Error: custom_selenium_interaction function not found in the code."
-        except Exception as e:
-            return f"An error occurred while executing the custom code: {str(e)}"
 
 
 def print_interactive_session_header(model):
@@ -409,6 +393,54 @@ def edit_code(code: str) -> str:
     console.print("Updated code:", style="bold magenta")
     console.print(edited_code, style="cyan")
     return edited_code
+
+
+def measure_tps(prompt: str, model: str, system_prompt_prefix: str = '', system_prompt_suffix: str = '') -> None:
+    url = "http://localhost:11434/api/generate"
+
+    temp_prompt = f"""
+    {system_prompt_prefix}
+    ===
+    {prompt}
+    ===
+    {system_prompt_suffix}
+    """
+
+    payload = {"model": model, "prompt": temp_prompt, "stream": True}
+
+    start_time = time.time()
+    response = requests.post(url, json=payload, stream=True)
+
+    total_tokens = 0
+    response_text = ""
+    eval_duration = None
+
+    console.print("Output:", style="bold", end=" ")
+    for line in response.iter_lines():
+        if line:
+            data = json.loads(line)
+            if 'response' in data:
+                console.print(data['response'], end="")
+                response_text += data['response']
+            if 'done' in data and data['done']:
+                total_tokens = data.get(
+                    'prompt_eval_count', 0) + data.get('eval_count', 0)
+                eval_duration = data.get('eval_duration', 0) / 1e9
+                break
+
+    console.print()  # Add a newline after the output
+
+    end_time = time.time()
+
+    if eval_duration is not None:
+        tps = total_tokens / eval_duration if eval_duration > 0 else 0
+        print_statistics(model, prompt, total_tokens,
+                         eval_duration, tps, data.get('total_duration', 0)/1e9)
+    else:
+        total_duration = end_time - start_time
+        console.print(f"\nTotal Time: {total_duration:.2f}s")
+        console.print(
+            "Note: Detailed timing information not available for this model.")
 
 
 if __name__ == "__main__":
