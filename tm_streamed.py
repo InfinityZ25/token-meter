@@ -416,8 +416,8 @@ if __name__ == "__main__":
         description="Measure TPS for Ollama models and perform web interactions")
     parser.add_argument("--prompt", type=str, default="Explain quantum computing in simple terms.",
                         help="Custom prompt for the model")
-    parser.add_argument("--model", type=str, default="llama2",
-                        help="Model to use (default: llama2)")
+    parser.add_argument("--model", type=str, default="llama3.2:3b",
+                        help="Model to use (default: llama3.2:3b)")
     parser.add_argument("-i", "--interactive",
                         action="store_true", help="Run in interactive mode")
     parser.add_argument("--system-prompt-prefix", type=str,
