@@ -12,8 +12,11 @@ from typing import Dict
 
 import requests
 import validators
-from colorama import Fore, Style, init
 from PIL import Image
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
@@ -21,8 +24,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from webdriver_manager.chrome import ChromeDriverManager
 
-# Initialize colorama
-init(autoreset=True)
+console = Console()
 
 # Emojis
 ROBOT = "🤖"
@@ -81,13 +83,13 @@ def measure_tps(prompt: str, model: str, system_prompt_prefix: str = '', system_
     response_text = ""
     eval_duration = None
 
-    print("Output:")
+    # Changed to end with a space
+    console.print("Output:", style="bold", end=" ")
     for line in response.iter_lines():
         if line:
             data = json.loads(line)
             if 'response' in data:
-                sys.stdout.write(data['response'])
-                sys.stdout.flush()
+                console.print(data['response'], end="")
                 response_text += data['response']
             if 'done' in data and data['done']:
                 total_tokens = data.get(
@@ -95,24 +97,19 @@ def measure_tps(prompt: str, model: str, system_prompt_prefix: str = '', system_
                 eval_duration = data.get('eval_duration', 0) / 1e9
                 break
 
-    end_time = time.time()
+    console.print()  # Add a newline after the output
 
-    print("\n\nStatistics:")
-    print(f"Model: {model}")
-    print(f"Input: {prompt[:50]}..." if len(
-        prompt) > 50 else f"Input: {prompt}")
-    print(f"Tokens: {total_tokens}")
+    end_time = time.time()
 
     if eval_duration is not None:
         tps = total_tokens / eval_duration if eval_duration > 0 else 0
-        print(f"Evaluation Time: {eval_duration:.2f}s")
-        print(f"Speed: {tps:.2f} tokens/second")
+        print_statistics(model, prompt, total_tokens,
+                         eval_duration, tps, data.get('total_duration', 0)/1e9)
     else:
         total_duration = end_time - start_time
-        print(f"Total Time: {total_duration:.2f}s")
-        print("Note: Detailed timing information not available for this model.")
-
-    print(f"Total Duration: {data.get('total_duration', 0)/1e9:.2f}s")
+        console.print(f"\nTotal Time: {total_duration:.2f}s")
+        console.print(
+            "Note: Detailed timing information not available for this model.")
 
 
 def get_command_suggestion(prompt: str, model: str, system_prompt_prefix: str = '', system_prompt_suffix: str = '') -> str:
@@ -135,17 +132,16 @@ def get_command_suggestion(prompt: str, model: str, system_prompt_prefix: str = 
     }
     response = requests.post(url, json=payload, stream=True)
     result = ""
-    print("Generating suggestion:")
+    console.print("Generating suggestion:", style="bold cyan")
     for line in response.iter_lines():
         if line:
             data = json.loads(line)
             if 'response' in data:
-                sys.stdout.write(data['response'])
-                sys.stdout.flush()
+                console.print(data['response'], end="")
                 result += data['response']
             if 'done' in data and data['done']:
                 break
-    print("\n")  # Add a newline after the streamed output
+    console.print()
 
     result = result.strip()
     if not validators.url(result):
@@ -173,7 +169,7 @@ def take_screenshot(driver: webdriver.Chrome, url: str) -> str:
 
 def selenium_web_interaction(url: str, take_screenshot: bool = False) -> str:
     if url in url_cache:
-        print("Using cached content...")
+        console.print("Using cached content...", style="bold yellow")
         return url_cache[url]
 
     with get_driver() as driver:
@@ -210,9 +206,15 @@ def generate_selenium_code(prompt: str, model: str, system_prompt_prefix: str = 
     temp_prompt = f"""
     {system_prompt_prefix}
     ===
-    Write a Python function using Selenium to accomplish the following task. Include comments explaining the code:
-    {prompt}
-    The function should be named 'custom_selenium_interaction' and take a 'driver' parameter.
+    Write a Python function using Selenium to accomplish the following task. Follow these guidelines:
+    1. Do not include any import statements.
+    2. The function should be named 'custom_selenium_interaction' and take a 'driver' parameter.
+    3. Use only the following pre-imported modules: selenium, By, WebDriverWait, EC
+    4. Do not create or quit the driver within the function.
+    5. Return the result directly from the function.
+    6. Include brief comments explaining the code.
+
+    Task: {prompt}
     ===
     {system_prompt_suffix}
     """
@@ -223,24 +225,22 @@ def generate_selenium_code(prompt: str, model: str, system_prompt_prefix: str = 
     }
     response = requests.post(url, json=payload, stream=True)
     generated_code = ""
-    print("Generating Selenium code:")
+    console.print("Generating Selenium code:", style="bold cyan")
     for line in response.iter_lines():
         if line:
             data = json.loads(line)
             if 'response' in data:
-                sys.stdout.write(data['response'])
-                sys.stdout.flush()
+                console.print(data['response'], end="")
                 generated_code += data['response']
             if 'done' in data and data['done']:
                 break
-    print("\n")  # Add a newline after the streamed output
+    console.print()
     return generated_code.strip()
 
 
 def execute_custom_selenium_code(code: str) -> str:
     with get_driver() as driver:
         try:
-            # Create a restricted local environment
             local_env = {'driver': driver, 'By': By,
                          'WebDriverWait': WebDriverWait, 'EC': EC}
             exec(code, {'__builtins__': {}}, local_env)
@@ -253,24 +253,73 @@ def execute_custom_selenium_code(code: str) -> str:
             return f"An error occurred while executing the custom code: {str(e)}"
 
 
-def print_fancy(text, color=Fore.WHITE, emoji=""):
-    print(f"\n{emoji} {color}{text}{Style.RESET_ALL}")
+def print_interactive_session_header(model):
+    header = Panel(
+        f"[bold cyan]Interactive Session with {model}[/]",
+        expand=False,
+        border_style="bold",
+        padding=(1, 1)
+    )
+    console.print(header)
+
+
+def print_commands():
+    table = Table(show_header=False, expand=False, box=None)
+    table.add_column("Emoji", style="cyan", no_wrap=True)
+    table.add_column("Command", style="green")
+    table.add_column("Description", style="yellow")
+
+    table.add_row("🌐", "/cmd <prompt>",
+                  "Web interaction or custom Selenium code")
+    table.add_row("📷", "/screenshot",
+                  "Take a screenshot of the last visited URL")
+    table.add_row("🔧", "/selenium <task>", "Generate custom Selenium code")
+    table.add_row("🚀", "exit", "Exit the session")
+
+    commands_panel = Panel(
+        table,
+        title="[bold]Available Commands[/]",
+        expand=False,
+        border_style="bold",
+        padding=(1, 1)
+    )
+    console.print(commands_panel)
+
+
+def print_statistics(model, prompt, tokens, eval_time, speed, total_duration):
+    stats = Table(show_header=False, expand=False, box=None)
+    stats.add_column("Stat", style="cyan", no_wrap=True)
+    stats.add_column("Value", style="yellow")
+
+    stats.add_row("Model", model)
+    stats.add_row("Input", (prompt[:47] + "...")
+                  if len(prompt) > 50 else prompt)
+    stats.add_row("Tokens", str(tokens))
+    stats.add_row("Evaluation Time", f"{eval_time:.2f}s")
+    stats.add_row("Speed", f"{speed:.2f} tokens/second")
+    stats.add_row("Total Duration", f"{total_duration:.2f}s")
+
+    stats_panel = Panel(
+        stats,
+        title="[bold]Statistics[/]",
+        expand=False,
+        border_style="bold",
+        padding=(1, 1)
+    )
+    console.print()  # Add a newline before the statistics
+    console.print(stats_panel)
 
 
 def interactive_session(model: str, system_prompt_prefix: str = '', system_prompt_suffix: str = '') -> None:
-    print_fancy(f"Interactive session with {model}", Fore.CYAN, ROBOT)
-    print_fancy("Commands:", Fore.YELLOW)
-    print(f"  {GLOBE}  /cmd <prompt>    - Web interaction or custom Selenium code")
-    print(f"  {CAMERA}  /screenshot      - Take a screenshot of the last visited URL")
-    print(f"  {WRENCH}  /selenium <task> - Generate custom Selenium code")
-    print(f"  {ROCKET}  exit             - Exit the session")
+    print_interactive_session_header(model)
+    print_commands()
 
     last_url = None
     last_selenium_code = None
     while True:
-        user_input = input(f"\n{Fore.GREEN}You:{Style.RESET_ALL} ").strip()
+        user_input = console.input("[bold green]You:[/] ")
         if user_input.lower() == 'exit':
-            print_fancy("Goodbye!", Fore.MAGENTA, ROCKET)
+            console.print("[bold magenta]Goodbye! 🚀[/]")
             break
         elif user_input.lower().startswith('/cmd'):
             cmd_prompt = user_input[5:].strip()
@@ -278,42 +327,43 @@ def interactive_session(model: str, system_prompt_prefix: str = '', system_promp
                 cmd_prompt, model, system_prompt_prefix, system_prompt_suffix)
 
             if validators.url(result):
-                print_fancy(f"Navigating to URL: {result}", Fore.BLUE, GLOBE)
+                console.print(f"Navigating to URL: {
+                              result}", style="bold blue")
                 stop_event = threading.Event()
                 stop_spinner = Thread(target=spinner, args=(stop_event,))
                 stop_spinner.start()
                 webpage_content = selenium_web_interaction(result)
                 stop_event.set()
                 stop_spinner.join()
-                print_fancy("Content retrieved:", Fore.CYAN)
-                print(f"{Fore.YELLOW}{webpage_content}{Style.RESET_ALL}")
+                console.print("Content retrieved:", style="bold cyan")
+                console.print(webpage_content, style="yellow")
                 last_url = result
             else:
-                print_fancy("Generated custom Selenium code:",
-                            Fore.MAGENTA, WRENCH)
-                print(f"{Fore.CYAN}{result}{Style.RESET_ALL}")
+                console.print("Generated custom Selenium code:",
+                              style="bold magenta")
+                console.print(result, style="cyan")
                 last_selenium_code = result
                 handle_selenium_code(last_selenium_code)
         elif user_input.lower() == '/screenshot' and last_url:
-            print_fancy(f"Taking screenshot of {
-                        last_url}...", Fore.BLUE, CAMERA)
+            console.print(f"Taking screenshot of {
+                          last_url}...", style="bold blue")
             stop_event = threading.Event()
             stop_spinner = Thread(target=spinner, args=(stop_event,))
             stop_spinner.start()
             result = selenium_web_interaction(last_url, take_screenshot=True)
             stop_event.set()
             stop_spinner.join()
-            print_fancy("Screenshot result:", Fore.CYAN)
-            print(f"{Fore.YELLOW}{result}{Style.RESET_ALL}")
+            console.print("Screenshot result:", style="bold cyan")
+            console.print(result, style="yellow")
         elif user_input.lower() == '/screenshot':
-            print_fancy(
-                "No previous URL to screenshot. Use /cmd first.", Fore.RED, ERROR)
+            console.print(
+                "No previous URL to screenshot. Use /cmd first.", style="bold red")
         elif user_input.lower().startswith('/selenium'):
             selenium_prompt = user_input[9:].strip()
             generated_code = generate_selenium_code(
                 selenium_prompt, model, system_prompt_prefix, system_prompt_suffix)
-            print_fancy("Generated Selenium code:", Fore.MAGENTA, WRENCH)
-            print(f"{Fore.CYAN}{generated_code}{Style.RESET_ALL}")
+            console.print("Generated Selenium code:", style="bold magenta")
+            console.print(generated_code, style="cyan")
             last_selenium_code = generated_code
             handle_selenium_code(last_selenium_code)
         else:
@@ -323,40 +373,41 @@ def interactive_session(model: str, system_prompt_prefix: str = '', system_promp
 
 def handle_selenium_code(code: str) -> None:
     while True:
-        action = input(f"\n{Fore.YELLOW}Do you want to (r)un, (e)dit, or (c)ancel this code? {
-                       Style.RESET_ALL}").lower()
+        action = console.input(
+            "[bold yellow]Do you want to (r)un, (e)dit, or (c)ancel this code? [/]").lower()
         if action == 'r':
-            print_fancy("Executing custom Selenium code...", Fore.BLUE, ROCKET)
+            console.print("Executing custom Selenium code...",
+                          style="bold blue")
             stop_event = threading.Event()
             stop_spinner = Thread(target=spinner, args=(stop_event,))
             stop_spinner.start()
             result = execute_custom_selenium_code(code)
             stop_event.set()
             stop_spinner.join()
-            print_fancy("Execution result:", Fore.CYAN)
-            print(f"{Fore.YELLOW}{result}{Style.RESET_ALL}")
+            console.print("Execution result:", style="bold cyan")
+            console.print(result, style="yellow")
             break
         elif action == 'e':
             code = edit_code(code)
         elif action == 'c':
-            print_fancy("Code execution cancelled.", Fore.RED)
+            console.print("Code execution cancelled.", style="bold red")
             break
         else:
-            print_fancy(
-                "Invalid option. Please choose (r)un, (e)dit, or (c)ancel.", Fore.RED, ERROR)
+            console.print(
+                "Invalid option. Please choose (r)un, (e)dit, or (c)ancel.", style="bold red")
 
 
 def edit_code(code: str) -> str:
-    print_fancy(
-        "Enter your edits (type 'done' on a new line when finished):", Fore.YELLOW, WRENCH)
-    edited_code = code + "\n"  # Start with the existing code
+    console.print(
+        "Enter your edits (type 'done' on a new line when finished):", style="bold yellow")
+    edited_code = code + "\n"
     while True:
-        line = input(f"{Fore.CYAN}> {Style.RESET_ALL}")
+        line = console.input("[cyan]> [/]")
         if line.strip().lower() == 'done':
             break
         edited_code += line + "\n"
-    print_fancy("Updated code:", Fore.MAGENTA)
-    print(f"{Fore.CYAN}{edited_code}{Style.RESET_ALL}")
+    console.print("Updated code:", style="bold magenta")
+    console.print(edited_code, style="cyan")
     return edited_code
 
 
