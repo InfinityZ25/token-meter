@@ -13,3 +13,9 @@
 - [ ] allow retries on the runs, with max_depth (configurable with arg --max-depth=3)
 
 - [ ] move to poetry
+
+- [ ] Implement proper code extraction and proper code imports on generated code blocks. Perform code compilation/validation stages before committing to final code approach.
+
+- [ ] Use an in memory json to remember user use-cases over different runs. Design to auto populate the system prompts and improve code accuracy.
+
+- [ ] Use in memory documentation and code examples for a topic using an in memory json

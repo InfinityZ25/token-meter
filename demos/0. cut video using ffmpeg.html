@@ -1,0 +1,107 @@
+╭──────────────────────────────────────╮
+│                                      │
+│ Interactive Session with llama3.2:3b │
+│                                      │
+╰──────────────────────────────────────╯
+╭─────────────────────── Available Commands ────────────────────────╮
+│                                                                   │
+│  🌐  /cmd <prompt>     Web interaction or custom Selenium code    │
+│  📷  /screenshot       Take a screenshot of the last visited URL  │
+│  🔧  /selenium <task>  Generate custom Selenium code              │
+│  🚀  exit              Exit the session                           │
+│                                                                   │
+╰───────────────────────────────────────────────────────────────────╯
+You: /cmd use ffmpeg to cut the video named "the video.mp4". cut from the first 4 secs until the second 34
+Generating suggestion:
+Nice to meet you! I'm Friday, your sassy assistant.
+
+To accomplish this task, we'll need to create a Python function using Selenium. FFmpeg is not directly accessible via Selenium, so we'll use the `subprocess` module instead.
+
+Here's the code:
+
+```python
+import subprocess
+from selenium import webdriver
+
+def custom_selenium_interaction(driver):
+    url = "https://ffmpeg.org/download.html"
+    driver.get(url)
+    element = driver.find_element_by_xpath("//a[@href='/download/ffmpeg-win64-staticlatest.exe']")
+    element.click()
+
+    # Wait for the download to finish
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+
+    driver.find_element_by_xpath('//button[text()="Download"]').click()
+    download_link = driver.find_element(By.XPATH, '//a[@href]').get_attribute('href')
+
+    # Open the ffmpeg executable and run it to cut the video
+    subprocess.run(["ffmpeg.exe", "-i", "the_video.mp4", 
+                    f"-ss 00:00:04 -t 00:00:30 -c:v copy output.mp4"], 
+                   stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    # Close the browser
+    driver.quit()
+
+# To use this function, create a new instance of the Chrome driver
+from selenium import webdriver
+
+driver = webdriver.Chrome()
+custom_selenium_interaction(driver)
+```
+
+This code will open the FFmpeg download page in your default browser, download the executable, and then run it to cut "the_video.mp4" from 4 seconds to 34 seconds.
+
+Please note that this is just a basic example. You may need to adjust the path of the FFmpeg executable based on your system's architecture (32-bit or 64-bit) and download location.
+Generated custom Selenium code:
+Nice to meet you! I'm Friday, your sassy assistant.
+
+To accomplish this task, we'll need to create a Python function using Selenium. FFmpeg is not directly accessible via Selenium, so we'll use the 
+`subprocess` module instead.
+
+Here's the code:
+
+```python
+import subprocess
+from selenium import webdriver
+
+def custom_selenium_interaction(driver):
+    url = "https://ffmpeg.org/download.html"
+    driver.get(url)
+    element = driver.find_element_by_xpath("//a")
+    element.click()
+
+    # Wait for the download to finish
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+
+    driver.find_element_by_xpath('//button').click()
+    download_link = driver.find_element(By.XPATH, '//a').get_attribute('href')
+
+    # Open the ffmpeg executable and run it to cut the video
+    subprocess.run(["ffmpeg.exe", "-i", "the_video.mp4", 
+                    f"-ss 00:00:04 -t 00:00:30 -c:v copy output.mp4"], 
+                   stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    # Close the browser
+    driver.quit()
+
+# To use this function, create a new instance of the Chrome driver
+from selenium import webdriver
+
+driver = webdriver.Chrome()
+custom_selenium_interaction(driver)
+```
+
+This code will open the FFmpeg download page in your default browser, download the executable, and then run it to cut "the_video.mp4" from 4 seconds 
+to 34 seconds.
+
+Please note that this is just a basic example. You may need to adjust the path of the FFmpeg executable based on your system's architecture (32-bit or
+64-bit) and download location.
+Do you want to (r)un, (e)dit, or (c)ancel this code? r
+Executing custom Selenium code...
+Execution result:
+An error occurred while executing the custom code: unterminated string literal (detected at line 1) (<string>, line 1)
