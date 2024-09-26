@@ -9,6 +9,7 @@
 
 - [ ] make edit mode actually run your prompts to modify the code ONLY in its own chat thread.
 - [ ] save written scripts to generated_scripts/ with docs and info about why they were created.
+        - [ ] classify in tmp, failed, and the $root directory which includes anything actually functional that maybe should get productionalized (auto ut's etc)
 - [ ] allow retries on the runs, with max_depth (configurable with arg --max-depth=3)
 
 - [ ] move to poetry
