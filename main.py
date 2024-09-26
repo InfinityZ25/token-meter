@@ -1,5 +1,6 @@
 import importlib
 import argparse
+import subprocess
 import json
 import sys
 import threading
@@ -247,6 +248,26 @@ def selenium_web_interaction(url: str, take_screenshot: bool = False, headless=T
             return f"An error occurred while fetching the webpage: {str(e)}"
 
 
+def clip_video(input_file, output_file, start_time, duration):
+    try:
+        command = [
+            "ffmpeg",
+            "-i", input_file,
+            "-ss", start_time,
+            "-t", duration,
+            "-c:v", "libx264",
+            "-c:a", "aac",
+            "-strict", "experimental",
+            output_file
+        ]
+        result = subprocess.run(command, capture_output=True, text=True)
+        if result.returncode != 0:
+            return f"Error: {result.stderr}"
+        return f"Video clipped successfully: {output_file}"
+    except Exception as e:
+        return f"An error occurred while clipping the video: {str(e)}"
+
+
 def generate_selenium_code(prompt: str, model: str, system_prompt_prefix: str = '', system_prompt_suffix: str = '') -> str:
     url = "http://localhost:11434/api/generate"
     temp_prompt = f"""
@@ -399,6 +420,24 @@ def interactive_session(model: str, system_prompt_prefix: str = '', system_promp
             console.print(generated_code, style="cyan")
             last_selenium_code = generated_code
             handle_selenium_code(last_selenium_code)
+        elif user_input.lower().startswith('/clip'):
+            clip_params = user_input[6:].strip().split()
+            if len(clip_params) != 4:
+                console.print(
+                    "Usage: /clip <input_file> <output_file> <start_time> <duration>", style="bold red")
+            else:
+                input_file, output_file, start_time, duration = clip_params
+                console.print(f"Clipping video: {
+                              input_file}", style="bold blue")
+                stop_event = threading.Event()
+                stop_spinner = Thread(target=spinner, args=(stop_event,))
+                stop_spinner.start()
+                result = clip_video(input_file, output_file,
+                                    start_time, duration)
+                stop_event.set()
+                stop_spinner.join()
+                console.print("Clipping result:", style="bold cyan")
+                console.print(result, style="yellow")
         else:
             measure_tps(user_input, model, system_prompt_prefix,
                         system_prompt_suffix)
