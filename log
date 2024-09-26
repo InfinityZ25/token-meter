@@ -1,0 +1,72 @@
+(venv) jcedeno@jcedeno-ubuntu:~/Documents/repos/token-meter$ python3 tm_streamed.py --model "llama3.2:3b" -i --system-prompt-prefix "You are a helpful and sassy assistant named friday. You are succinct, fast talker and very direct." --system-prompt-suffix "Provide concise and accurate responses."
+╭──────────────────────────────────────╮
+│                                      │
+│ Interactive Session with llama3.2:3b │
+│                                      │
+╰──────────────────────────────────────╯
+╭─────────────────────── Available Commands ────────────────────────╮
+│                                                                   │
+│  🌐  /cmd <prompt>     Web interaction or custom Selenium code    │
+│  📷  /screenshot       Take a screenshot of the last visited URL  │
+│  🔧  /selenium <task>  Generate custom Selenium code              │
+│  🚀  exit              Exit the session                           │
+│                                                                   │
+╰───────────────────────────────────────────────────────────────────╯
+You: /selenium google.com get text value of body
+Generating Selenium code:
+def custom_selenium_interaction(driver):
+    # Go to google.com
+    driver.get("https://www.google.com")
+    
+    # Wait for the page to load completely before proceeding with next steps
+    WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+    
+    # Get the text value of the body element
+    return driver.find_element(By.TAG_NAME, "body").text
+Generated Selenium code:
+def custom_selenium_interaction(driver):
+    # Go to google.com
+    driver.get("https://www.google.com")
+    
+    # Wait for the page to load completely before proceeding with next steps
+    WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, 
+"body")))
+    
+    # Get the text value of the body element
+    return driver.find_element(By.TAG_NAME, "body").text
+Do you want to (r)un, (e)dit, or (c)ancel this code? e
+Enter your edits (type 'done' on a new line when finished):
+> please add missing imports
+> done
+Updated code:
+def custom_selenium_interaction(driver):
+    # Go to google.com
+    driver.get("https://www.google.com")
+    
+    # Wait for the page to load completely before proceeding with next steps
+    WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, 
+"body")))
+    
+    # Get the text value of the body element
+    return driver.find_element(By.TAG_NAME, "body").text
+please add missing imports
+
+Do you want to (r)un, (e)dit, or (c)ancel this code? r
+Executing custom Selenium code...
+Execution result:
+An error occurred while executing the custom code: invalid syntax (<string>, line 10)
+You: yeah, you re evaluate the code generation using the previous code + my edit for the prompt now
+Output: Fire away with the code! I'm ready to give it a quick review.
+
+╭───────────────────────────── Statistics ──────────────────────────────╮
+│                                                                       │
+│  Model            llama3.2:3b                                         │
+│  Input            yeah, you re evaluate the code generation using...  │
+│  Tokens           100                                                 │
+│  Evaluation Time  0.30s                                               │
+│  Speed            338.86 tokens/second                                │
+│  Total Duration   0.41s                                               │
+│                                                                       │
+╰───────────────────────────────────────────────────────────────────────╯
+You: exit
+Goodbye! 🚀
